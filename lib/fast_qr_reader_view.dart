@@ -155,6 +155,9 @@ class QRReaderValue {
   /// True when the camera is scanning.
   final bool isScanning;
 
+  /// True when the flash is on.
+  final bool isFlashOn;
+
   final String errorDescription;
 
   /// The size of the preview in pixels.
@@ -167,12 +170,14 @@ class QRReaderValue {
     this.errorDescription,
     this.previewSize,
     this.isScanning,
+    this.isFlashOn,
   });
 
   const QRReaderValue.uninitialized()
       : this(
           isInitialized: false,
           isScanning: false,
+          isFlashOn:false,
         );
 
   /// Convenience getter for `previewSize.height / previewSize.width`.
@@ -187,12 +192,14 @@ class QRReaderValue {
     bool isScanning,
     String errorDescription,
     Size previewSize,
+    bool isFlashOn,
   }) {
     return new QRReaderValue(
       isInitialized: isInitialized ?? this.isInitialized,
       errorDescription: errorDescription,
       previewSize: previewSize ?? this.previewSize,
       isScanning: isScanning ?? this.isScanning,
+      isFlashOn: isFlashOn ?? this.isFlashOn,
     );
   }
 
@@ -202,7 +209,8 @@ class QRReaderValue {
         'isScanning: $isScanning, '
         'isInitialized: $isInitialized, '
         'errorDescription: $errorDescription, '
-        'previewSize: $previewSize)';
+        'previewSize: $previewSize,'
+        'isFlashOn: $isFlashOn)';
   }
 }
 
@@ -329,6 +337,28 @@ class QRReaderController extends ValueNotifier<QRReaderValue> {
       value = value.copyWith(isScanning: false);
       await _channel.invokeMethod(
         'stopScanning',
+        <String, dynamic>{'textureId': _textureId},
+      );
+    } on PlatformException catch (e) {
+      throw new QRReaderException(e.code, e.message);
+    }
+  }
+
+  /// Toogle flash on Off.
+  ///
+  /// Throws a [QRReaderException] if the capture fails.
+  Future<Null> toggleFlash() async {
+
+    if (!value.isInitialized || _isDisposed) {
+      throw new QRReaderException(
+        'Uninitialized QRReaderController',
+        'toggleFlash was called on uninitialized QRReaderController',
+      );
+    }
+    try {
+      value = value.copyWith(isScanning: true);
+      await _channel.invokeMethod(
+        'toggleFlash',
         <String, dynamic>{'textureId': _textureId},
       );
     } on PlatformException catch (e) {

@@ -33,6 +33,7 @@ AVCaptureMetadataOutputObjectsDelegate>
 //@property(strong, nonatomic) AVAssetWriterInput *audioWriterInput;
 @property(strong, nonatomic) AVAssetWriterInputPixelBufferAdaptor *assetWriterPixelBufferAdaptor;
 @property(assign, nonatomic) BOOL isScanning;
+@property(assign, nonatomic) BOOL isFlashOn;
 @property(strong, nonatomic) FlutterMethodChannel *channel;
 @property(strong, nonatomic) NSArray *codeFormats;
 
@@ -43,6 +44,7 @@ AVCaptureMetadataOutputObjectsDelegate>
                              error:(NSError **)error;
 - (void)start;
 - (void)stop;
+- (void)toggleFlash;
 @end
 
 @implementation FMCam
@@ -143,6 +145,35 @@ AVCaptureMetadataOutputObjectsDelegate>
     [_captureSession stopRunning];
 }
 
+- (void)toggleFlash {
+    
+    if ([_captureDevice hasFlash] && [_captureDevice hasTorch]) {
+        
+        [_captureDevice lockForConfiguration:nil];
+        if (!_isFlashOn) {
+            _isFlashOn = true;
+            [_captureDevice setTorchMode:AVCaptureTorchModeOn];
+            if (@available(iOS 10.0, *)) {
+                AVCapturePhotoSettings *photoSetting = [AVCapturePhotoSettings photoSettings];
+                [photoSetting setFlashMode:AVCaptureFlashModeOn];
+            } else {
+                [_captureDevice setFlashMode:AVCaptureFlashModeOn];
+            }
+        }else{
+            _isFlashOn = false;
+            [_captureDevice setTorchMode:AVCaptureTorchModeOff];
+            
+            if (@available(iOS 10.0, *)) {
+                AVCapturePhotoSettings *photoSetting = [AVCapturePhotoSettings photoSettings];
+                [photoSetting setFlashMode:AVCaptureFlashModeOff];
+            } else {
+                [_captureDevice setFlashMode:AVCaptureFlashModeOff];
+            }
+        }
+        [_captureDevice unlockForConfiguration];
+    }
+}
+
 - (void)captureOutput:(AVCaptureOutput *)output didOutputMetadataObjects:(NSArray<__kindof AVMetadataObject *> *)metadataObjects fromConnection:(AVCaptureConnection *)connection {
     if (metadataObjects != nil && [metadataObjects count] > 0) {
         AVMetadataMachineReadableCodeObject *metadataObj = [metadataObjects objectAtIndex:0];
@@ -172,6 +203,15 @@ AVCaptureMetadataOutputObjectsDelegate>
     dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
     dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
         self->_isScanning = true;
+    });
+}
+
+- (void)toggleFlash:(FlutterResult)result {
+    // Added this delay to avoid encountering race condition
+    double delayInSeconds = 0.1;
+    dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delayInSeconds * NSEC_PER_SEC));
+    dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+        self->_isFlashOn = _isFlashOn;
     });
 }
 
@@ -269,6 +309,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
 }
 
 - (void)handleMethodCall:(FlutterMethodCall *)call result:(FlutterResult)result {
+    NSLog(@"method=== %@", call.method);
     if ([@"init" isEqualToString:call.method]) {
         if (_camera) {
             [_camera close];
@@ -338,6 +379,8 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
                      });
             [cam start];
         }
+    } else if ([@"toggleFlash" isEqualToString:call.method]) {
+        [_camera toggleFlash];
     } else {
         NSDictionary *argsMap = call.arguments;
         NSUInteger textureId = ((NSNumber *)argsMap[@"textureId"]).unsignedIntegerValue;
